@@ -1,0 +1,18 @@
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6381:6379"
+
+  app:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      REDIS_URL: redis://redis:6379/0
+      CARBON_PROVIDER: mock
+      CLEAN_THRESHOLD_G_PER_KWH: "250"
+      POLL_INTERVAL_SECONDS: "15"
+      MAX_WAIT_MINUTES: "60"
+    depends_on:
+      - redis

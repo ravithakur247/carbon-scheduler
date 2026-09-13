@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Carbon-Aware Inference Scheduler</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font-family: -apple-system, Segoe UI, Roboto, sans-serif; background: #0f1115; color: #e6e8eb; margin: 0; padding: 32px; }
+  h1 { font-size: 20px; font-weight: 600; margin-bottom: 4px; }
+  .sub { color: #9aa4af; font-size: 13px; margin-bottom: 28px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 14px; margin-bottom: 28px; }
+  .card { background: #171a21; border: 1px solid #262b35; border-radius: 10px; padding: 16px; }
+  .card .label { font-size: 12px; color: #9aa4af; margin-bottom: 6px; }
+  .card .value { font-size: 24px; font-weight: 600; }
+  .green { color: #4ade80; }
+  .amber { color: #fbbf24; }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; }
+  th, td { text-align: left; padding: 8px 10px; border-bottom: 1px solid #262b35; }
+  th { color: #9aa4af; font-weight: 500; }
+  .status { padding: 2px 8px; border-radius: 5px; font-size: 11px; font-weight: 600; }
+  .status-completed { background: #16351f; color: #4ade80; }
+  .status-queued { background: #3a2f12; color: #fbbf24; }
+  .status-running { background: #1b2c47; color: #60a5fa; }
+  .region-pill { font-size: 11px; padding: 1px 6px; border-radius: 4px; background: #21262f; color: #9aa4af; }
+  #err { color: #f87171; font-size: 13px; }
+</style>
+</head>
+<body>
+  <h1>🌱 Carbon-Aware Inference Scheduler</h1>
+  <div class="sub">Live view — auto-refreshes every 5s</div>
+  <div id="err"></div>
+
+  <div class="grid" id="stats-grid"></div>
+
+  <h3>Grid carbon intensity by region</h3>
+  <div class="grid" id="carbon-grid"></div>
+
+  <h3>Recent jobs</h3>
+  <table>
+    <thead>
+      <tr><th>ID</th><th>Status</th><th>Region</th><th>Intensity (run)</th><th>Delay (min)</th><th>CO₂ emitted (g)</th><th>CO₂ saved (g)</th></tr>
+    </thead>
+    <tbody id="jobs-body"></tbody>
+  </table>
+
+<script>
+async function refresh() {
+  try {
+    const [stats, carbon, jobs] = await Promise.all([
+      fetch('/stats').then(r => r.json()),
+      fetch('/carbon').then(r => r.json()),
+      fetch('/jobs?limit=20').then(r => r.json()),
+    ]);
+    document.getElementById('err').textContent = '';
+
+    document.getElementById('stats-grid').innerHTML = `
+      <div class="card"><div class="label">Jobs completed</div><div class="value">${stats.jobs_completed}</div></div>
+      <div class="card"><div class="label">CO₂ saved</div><div class="value green">${stats.co2_saved_g.toFixed(1)} g</div></div>
+      <div class="card"><div class="label">CO₂ emitted</div><div class="value">${stats.co2_emitted_g.toFixed(1)} g</div></div>
+      <div class="card"><div class="label">Jobs in queue</div><div class="value amber">${stats.queue_depth}</div></div>
+    `;
+
+    document.getElementById('carbon-grid').innerHTML = Object.entries(carbon).map(([region, val]) => `
+      <div class="card">
+        <div class="label">${region}</div>
+        <div class="value ${val < 250 ? 'green' : 'amber'}">${val.toFixed(0)} <span style="font-size:12px;color:#9aa4af">gCO₂/kWh</span></div>
+      </div>
+    `).join('');
+
+    document.getElementById('jobs-body').innerHTML = jobs.map(j => `
+      <tr>
+        <td>${j.id}</td>
+        <td><span class="status status-${j.status}">${j.status}</span></td>
+        <td>${j.region_used ? `<span class="region-pill">${j.region_used}</span>` : '—'}</td>
+        <td>${j.carbon_intensity_at_run != null ? j.carbon_intensity_at_run.toFixed(0) : '—'}</td>
+        <td>${j.delayed_by_minutes != null ? j.delayed_by_minutes : '—'}</td>
+        <td>${j.co2_emitted_g != null ? j.co2_emitted_g : '—'}</td>
+        <td>${j.co2_saved_g != null ? j.co2_saved_g : '—'}</td>
+      </tr>
+    `).join('');
+  } catch (e) {
+    document.getElementById('err').textContent = 'Failed to load: ' + e;
+  }
+}
+refresh();
+setInterval(refresh, 5000);
+</script>
+</body>
+</html>
